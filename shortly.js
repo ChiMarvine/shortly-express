@@ -39,7 +39,7 @@ app.use(session({
 /************************************************************/
 
 //on load we initially want to be logging in
-  //if we are still in session go to index if
+  //if we are still in session go to index
   //if not go to login
 app.get('/',
 function(req, res) {
@@ -60,7 +60,6 @@ app.post('/login', function(req, res){
   var pw = req.body.password;
   //check database for the hashed password
   db.knex('users').select('password').where('username', req.body.username).then(function(result){
-    console.log("RESULT", result);
     var hash = result[0].password;
     var validated = bcrypt.compareSync(pw, hash);
     if(validated){
@@ -122,7 +121,11 @@ app.post('/signup', function(req, res){
 // Logout
 /************************************************************/
 
-//TODO: On click direct to the login page
+//on logout destroy the session and redirect to login
+app.post('/logout', function(req, res){
+  req.session.destroy();
+    res.redirect('/login');
+});
 
 /************************************************************/
 // Links
