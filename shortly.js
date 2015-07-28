@@ -2,6 +2,9 @@ var express = require('express');
 var util = require('./lib/utility');
 var partials = require('express-partials');
 var bodyParser = require('body-parser');
+//added libraries
+var session = require('express-session');
+var bcrypt = require('bcrypt-nodejs');
 
 
 var db = require('./app/config');
@@ -23,15 +26,107 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(__dirname + '/public'));
 
 
-app.get('/', 
+/************************************************************/
+// Write your authentication routes here
+/************************************************************/
+
+app.use(session({
+  secret: 'hr30'
+}));
+
+/************************************************************/
+// Login
+/************************************************************/
+
+//on load we initially want to be logging in
+  //if we are still in session go to index if
+  //if not go to login
+app.get('/',
 function(req, res) {
-  res.render('index');
+  if(req.session.user){
+    res.render('index');
+  } else {
+    res.redirect('/login');
+  }
 });
 
-app.get('/create', 
-function(req, res) {
-  res.render('index');
+//serves login page
+app.get('/login', function(req, res){
+  res.render('login');
 });
+
+//validate whether user gave the correct password
+app.post('/login', function(req, res){
+  var pw = req.body.password;
+  //check database for the hashed password
+  db.knex('users').select('password').where('username', req.body.username).then(function(result){
+    console.log("RESULT", result);
+    var hash = result[0].password;
+    var validated = bcrypt.compareSync(pw, hash);
+    if(validated){
+      req.session.regenerate(function(){
+        req.session.user = req.body.username;
+        res.redirect('/');
+      });
+    } else {
+      console.log('not validated');
+      res.redirect('/signup');
+    }
+  });
+});
+
+//if user wants to shorten links but is not
+//logged in send them to login 
+app.get('/create', function(req, res) {
+  if(req.session.user){
+    res.render('index');
+  } else {
+    res.redirect('/login');
+  }
+});
+
+/************************************************************/
+// Signup
+/************************************************************/
+
+//direct to signup page
+app.get('/signup', function(req, res){
+  res.render('signup');
+});
+
+//on signup, check to see if the username is taken
+//if not create a new user and save to database
+app.post('/signup', function(req, res){
+  bcrypt.hash(req.body.password, null, null, function(err, hash){
+    //check username's validity in our database
+    new User({username : req.body.username}).fetch().then(function(located){
+      if(located){
+        console.log('username taken');
+      } else {
+        //save user into database
+        var user = new User({username : req.body.username, password : hash});
+        user.save().then(function(newUser){
+        console.log('user stored in database');
+       });
+        //direct to login after being created
+        res.redirect('/login');
+      }
+    });
+    if(err){ 
+      console.log('error');
+    } 
+  });
+});
+
+/************************************************************/
+// Logout
+/************************************************************/
+
+//TODO: On click direct to the login page
+
+/************************************************************/
+// Links
+/************************************************************/
 
 app.get('/links', 
 function(req, res) {
@@ -40,8 +135,7 @@ function(req, res) {
   });
 });
 
-app.post('/links', 
-function(req, res) {
+app.post('/links', function(req, res) {
   var uri = req.body.url;
 
   if (!util.isValidUrl(uri)) {
@@ -73,12 +167,6 @@ function(req, res) {
     }
   });
 });
-
-/************************************************************/
-// Write your authentication routes here
-/************************************************************/
-
-
 
 /************************************************************/
 // Handle the wildcard route last - if all other routes fail
